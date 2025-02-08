@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Local Web Camera</title>
+    <link rel="stylesheet" href="style.css">
+    <!-- Change Socket.IO script source to use a CDN -->
+    <script src="https://cdn.socket.io/4.7.4/socket.io.min.js" integrity="sha384-Gr6Lu2Ajx28mzwyVR8CFkULdCU7kMlZ9UthllibdOSo6qAiN+yXNHqtgdTvFXMT4" crossorigin="anonymous"></script>
+</head>
+<body>
+    <div class="container">
+        <h1>Local Web Camera Stream</h1>
+        <div id="connectionStatus"></div>
+        <!-- Add this new div -->
+        <div id="permissionInfo" class="permission-info">
+            <p>This app requires camera and microphone access.</p>
+        </div>
+        <div class="video-container">
+            <video id="localVideo" autoplay playsinline muted></video>
+            <video id="remoteVideo" autoplay playsinline></video>
+        </div>
+        <div class="controls">
+            <button id="startButton">Start Camera</button>
+            <button id="stopButton">Stop Camera</button>
+            <button id="shareButton">Share Link</button>
+        </div>
+        <div id="shareInfo" class="share-info">
+            <p>Your stream URL: <span id="streamUrl"></span></p>
+        </div>
+    </div>
+    <script src="app.js"></script>
+</body>
+</html>
