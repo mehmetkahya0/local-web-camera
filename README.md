@@ -6,6 +6,7 @@
 [![GitHub forks](https://img.shields.io/github/forks/mehmetkahya0/local-web-camera)](https://github.com/mehmetkahya0/local-web-camera/network)
 [![Node.js Version](https://img.shields.io/badge/node-%3E%3D%2014.0.0-brightgreen)](https://nodejs.org/)
 [![WebRTC](https://img.shields.io/badge/WebRTC-Enabled-blue)](https://webrtc.org/)
+[![Visitors](https://api.visitorbadge.io/api/visitors?path=https%3A%2F%2Fgithub.com%2Fmehmetkahya0%2Flocal-web-camera&label=VISITORS&countColor=%23263759)](https://visitorbadge.io/status?path=https%3A%2F%2Fgithub.com%2Fmehmetkahya0%2Flocal-web-camera)
 
 A peer-to-peer web camera streaming application built with WebRTC, Socket.IO, and Express. Stream your camera to another device on your local network with minimal latency.
 
