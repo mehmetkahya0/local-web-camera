@@ -7,6 +7,7 @@
     <link rel="stylesheet" href="style.css">
     <!-- Change Socket.IO script source to use a CDN -->
     <script src="https://cdn.socket.io/4.7.4/socket.io.min.js" integrity="sha384-Gr6Lu2Ajx28mzwyVR8CFkULdCU7kMlZ9UthllibdOSo6qAiN+yXNHqtgdTvFXMT4" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body>
     <div class="container">
@@ -25,11 +26,16 @@
             <button id="startButton">Start Camera</button>
             <button id="stopButton">Stop Camera</button>
             <button id="shareButton">Share Link</button>
+            <button id="statsButton">Toggle Stats</button>
         </div>
         <div id="shareInfo" class="share-info">
             <p>Your stream URL: <span id="streamUrl"></span></p>
         </div>
+        <div id="stats-overlay">
+            <canvas id="statsGraph"></canvas>
+        </div>
     </div>
     <script src="app.js"></script>
+
 </body>
 </html>

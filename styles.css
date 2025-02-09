@@ -1,0 +1,32 @@
+#stats-overlay {
+    position: fixed;
+    top: 10px;
+    right: 10px;
+    width: 300px;
+    height: 150px;
+    background: rgba(0, 0, 0, 0.7);
+    border-radius: 5px;
+    z-index: 1000;
+    display: none;
+    padding: 10px;
+}
+
+#statsButton {
+    background-color: #444;
+    color: white;
+    border: none;
+    padding: 8px 16px;
+    border-radius: 4px;
+    cursor: pointer;
+    margin: 0 5px;
+}
+
+#statsButton.active {
+    background-color: #666;
+    box-shadow: inset 0 0 5px rgba(0,0,0,0.5);
+}
+
+#statsGraph {
+    width: 100%;
+    height: 100%;
+}

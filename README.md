@@ -100,6 +100,37 @@ The server runs on port 8080 by default. To change this:
 - Automatic connection monitoring
 - Cross-Origin Resource Sharing (CORS) protection
 
+## Chart Features
+
+The application includes real-time data visualization capabilities using charts:
+
+### Available Charts
+
+- **Connection Status:** Displays real-time connection status of users
+- **Bandwidth Usage:** Shows network bandwidth consumption
+- **User Activity:** Tracks active users over time
+
+### Using Charts
+
+1. Open the dashboard panel
+2. Select desired chart type from the dropdown
+3. Charts will update automatically in real-time
+
+```mermaid
+graph TD
+    A[Data Collection] --> B[Processing]
+    B --> C[Chart Rendering]
+    C --> D[Real-time Updates]
+    D --> B
+```
+
+### Chart Configuration
+
+Charts can be customized through the settings panel:
+- Update frequency (1-60 seconds)
+- Data retention period
+- Display options
+
 ## 🤝 Contributing
 
 1. Fork the repository

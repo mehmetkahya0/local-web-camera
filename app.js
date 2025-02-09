@@ -5,6 +5,7 @@ const stopButton = document.getElementById('stopButton');
 const shareButton = document.getElementById('shareButton');
 const shareInfo = document.getElementById('shareInfo');
 const streamUrl = document.getElementById('streamUrl');
+const statsButton = document.getElementById('statsButton'); // Add this line
 
 let localStream = null;
 let peerConnection = null;
@@ -12,6 +13,9 @@ let currentRoomId = null;
 let socket = null;
 let serverIP = null;
 let isHost = false; // Add this at the top with other let declarations
+let statsChart = null; // Add this line
+let statsInterval = null; // Add this line
+let isStatsVisible = false; // Add this line
 
 // Add this function near the top of the file
 async function tryPlayVideo(videoElement) {
@@ -186,6 +190,34 @@ function setupSocketListeners() {
 startButton.addEventListener('click', startCamera);
 stopButton.addEventListener('click', stopCamera);
 shareButton.addEventListener('click', shareStream);
+statsButton.addEventListener('click', () => { // Add this block
+    console.log('Stats button clicked');
+    isStatsVisible = !isStatsVisible;
+    const statsOverlay = document.getElementById('stats-overlay');
+    const statsButton = document.getElementById('statsButton');
+    
+    statsOverlay.style.display = isStatsVisible ? 'block' : 'none';
+    statsButton.classList.toggle('active');
+    
+    if (isStatsVisible && peerConnection) {
+        console.log('Initializing stats...');
+        if (!statsChart) {
+            initializeStatsGraph();
+        }
+        // Start stats collection
+        if (!statsInterval) {
+            statsInterval = setInterval(() => {
+                updateStats(peerConnection);
+            }, 1000);
+        }
+    } else {
+        console.log('Stopping stats...');
+        if (statsInterval) {
+            clearInterval(statsInterval);
+            statsInterval = null;
+        }
+    }
+});
 
 async function requestCameraPermission() {
     try {
@@ -597,3 +629,134 @@ window.onbeforeunload = () => {
         localStream.getTracks().forEach(track => track.stop());
     }
 };
+
+// Add these functions for stats handling
+const maxDataPoints = 50;
+const statsData = {
+    videoBitrate: Array(maxDataPoints).fill(0),
+    frameRate: Array(maxDataPoints).fill(0),
+    packetsLost: Array(maxDataPoints).fill(0)
+};
+
+function initializeStatsGraph() {
+    const ctx = document.getElementById('statsGraph').getContext('2d');
+    statsChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: Array(maxDataPoints).fill(''),
+            datasets: [{
+                label: 'Bitrate (kbps)',
+                data: statsData.videoBitrate,
+                borderColor: 'rgb(75, 192, 192)',
+                tension: 0.4
+            }, {
+                label: 'FPS',
+                data: statsData.frameRate,
+                borderColor: 'rgb(255, 99, 132)',
+                tension: 0.4
+            }, {
+                label: 'Packets Lost',
+                data: statsData.packetsLost,
+                borderColor: 'rgb(255, 205, 86)',
+                tension: 0.4
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            animation: false,
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    grid: {
+                        color: 'rgba(255, 255, 255, 0.1)'
+                    },
+                    ticks: {
+                        color: 'rgba(255, 255, 255, 0.8)'
+                    }
+                },
+                x: {
+                    display: false
+                }
+            },
+            plugins: {
+                legend: {
+                    labels: {
+                        color: 'rgba(255, 255, 255, 0.8)'
+                    }
+                }
+            }
+        }
+    });
+}
+
+let lastBytesSent = 0;
+let lastTimestamp = 0;
+
+async function updateStats(peerConnection) {
+    if (!peerConnection) {
+        console.log('No peer connection available');
+        return;
+    }
+    
+    try {
+        const stats = await peerConnection.getStats();
+        let videoStats = null;
+        let currentBytesSent = 0;
+        let currentTimestamp = 0;
+
+        stats.forEach(report => {
+            if (report.type === 'outbound-rtp' && report.kind === 'video') {
+                videoStats = report;
+                currentBytesSent = report.bytesSent;
+                currentTimestamp = report.timestamp;
+            }
+        });
+
+        if (videoStats && lastBytesSent > 0) {
+            const bytesPerSecond = (currentBytesSent - lastBytesSent) * 8 / (currentTimestamp - lastTimestamp) * 1000;
+            const kbps = Math.round(bytesPerSecond / 1024);
+
+            statsData.videoBitrate.push(kbps);
+            statsData.videoBitrate.shift();
+            
+            statsData.frameRate.push(videoStats.framesPerSecond || 0);
+            statsData.frameRate.shift();
+            
+            statsData.packetsLost.push(videoStats.packetsLost || 0);
+            statsData.packetsLost.shift();
+
+            if (statsChart) {
+                statsChart.update('none');
+            }
+        }
+
+        lastBytesSent = currentBytesSent;
+        lastTimestamp = currentTimestamp;
+    } catch (error) {
+        console.error('Error updating stats:', error);
+    }
+}
+
+// Modify your existing stopConnection function
+function stopConnection() {
+    if (statsInterval) {
+        clearInterval(statsInterval);
+        statsInterval = null;
+    }
+    
+    if (statsChart) {
+        statsChart.destroy();
+        statsChart = null;
+    }
+    
+    isStatsVisible = false;
+    document.getElementById('stats-overlay').style.display = 'none';
+    document.getElementById('statsButton').classList.remove('active');
+    
+    if (peerConnection) {
+        peerConnection.close();
+        peerConnection = null;
+    }
+    // ...rest of your existing stopConnection code...
+}
