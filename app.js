@@ -13,13 +13,67 @@ let socket = null;
 let serverIP = null;
 let isHost = false; // Add this at the top with other let declarations
 
+// Add this function near the top of the file
+async function tryPlayVideo(videoElement) {
+    try {
+        if (videoElement.paused) {
+            // iOS specific attributes
+            videoElement.setAttribute('playsinline', '');
+            videoElement.setAttribute('webkit-playsinline', '');
+            
+            // Try playing with different options
+            try {
+                await videoElement.play();
+                console.log('Video playback started successfully');
+            } catch (e) {
+                console.warn('Playback failed, trying with muted:', e);
+                videoElement.muted = true;
+                await videoElement.play();
+                
+                // Add unmute button with iOS-friendly styling
+                if (!document.getElementById('unmuteButton')) {
+                    const unmuteButton = document.createElement('button');
+                    unmuteButton.id = 'unmuteButton';
+                    unmuteButton.textContent = 'Tap to Unmute';
+                    unmuteButton.style.position = 'fixed';
+                    unmuteButton.style.bottom = '40px';
+                    unmuteButton.style.left = '50%';
+                    unmuteButton.style.transform = 'translateX(-50%)';
+                    unmuteButton.style.zIndex = '1000';
+                    unmuteButton.style.padding = '12px 24px';
+                    unmuteButton.style.backgroundColor = '#007AFF';
+                    unmuteButton.style.color = 'white';
+                    unmuteButton.style.border = 'none';
+                    unmuteButton.style.borderRadius = '20px';
+                    unmuteButton.onclick = () => {
+                        videoElement.muted = false;
+                        unmuteButton.remove();
+                    };
+                    document.body.appendChild(unmuteButton);
+                }
+            }
+        }
+    } catch (error) {
+        console.error('Final playback attempt failed:', error);
+    }
+}
+
 // Initialize the application
 async function init() {
     try {
+        // Use window.location.hostname instead of localhost
         const currentHost = window.location.hostname;
         const currentPort = '8080';
         
-        socket = io(`http://${currentHost}:${currentPort}`);
+        // Log connection details for debugging
+        console.log('Connecting to:', `http://${currentHost}:${currentPort}`);
+        
+        socket = io(`http://${currentHost}:${currentPort}`, {
+            reconnection: true,
+            reconnectionAttempts: 5,
+            timeout: 10000,
+            transports: ['websocket', 'polling']
+        });
         
         const connectionStatus = document.getElementById('connectionStatus');
         const urlParams = new URLSearchParams(window.location.search);
@@ -151,39 +205,43 @@ async function startCamera() {
     }
 
     try {
-        // First check if permissions are granted
         const hasPermission = await requestCameraPermission();
-
         if (!hasPermission) {
-            alert('Please allow camera and microphone access to use this app. You might need to reset permissions in your browser settings.');
+            alert('Please allow camera and microphone access to use this app.');
             return;
         }
 
-        // Now actually get the stream for use
+        // More specific video constraints for better compatibility
         localStream = await navigator.mediaDevices.getUserMedia({
             video: {
-                width: { ideal: 1280 },
-                height: { ideal: 720 }
+                width: { ideal: 1280, max: 1920 },
+                height: { ideal: 720, max: 1080 },
+                frameRate: { ideal: 30, max: 60 },
+                facingMode: 'user'
             },
-            audio: true
+            audio: {
+                echoCancellation: true,
+                noiseSuppression: true
+            }
         });
         
+        // Add video element event listeners
         localVideo.srcObject = localStream;
+        tryPlayVideo(localVideo);
         
-        // Add buffer size monitoring
-        localVideo.addEventListener('loadedmetadata', () => {
-            setInterval(() => {
-                if (localVideo.buffered.length > 0) {
-                    const bufferedSeconds = localVideo.buffered.end(0) - localVideo.buffered.start(0);
-                    console.log('Local Video Buffer Size:', bufferedSeconds.toFixed(2), 'seconds');
-                }
-            }, 1000);
-        });
+        // Verify video tracks
+        const videoTrack = localStream.getVideoTracks()[0];
+        if (videoTrack) {
+            console.log('Video track settings:', videoTrack.getSettings());
+            videoTrack.onended = () => {
+                console.log('Video track ended');
+                stopCamera();
+            };
+        } else {
+            throw new Error('No video track available');
+        }
 
         // Update button states
-        
-
-
         startButton.disabled = true;
         stopButton.disabled = false;
         shareButton.disabled = false;
@@ -216,32 +274,82 @@ async function initializePeerConnection() {
         peerConnection.close();
     }
     
-    peerConnection = new RTCPeerConnection({
+    const configuration = {
         iceServers: [
-            { urls: 'stun:stun.l.google.com:19302' },
             { urls: 'stun:stun1.l.google.com:19302' },
-            // Remove viagenie TURN server as it might be unreliable
+            { urls: 'stun:stun2.l.google.com:19302' },
+            { urls: 'stun:stun3.l.google.com:19302' },
+            { urls: 'stun:stun4.l.google.com:19302' },
             {
-                urls: 'turn:openrelay.metered.ca:80',
-                username: 'openrelayproject',
-                credential: 'openrelayproject'
+                urls: 'turn:numb.viagenie.ca',
+                username: 'webrtc@live.com',
+                credential: 'muazkh'
             }
         ],
-        iceCandidatePoolSize: 10,
-        // Add iOS-specific constraints
-        sdpSemantics: 'unified-plan',
-        iceTransportPolicy: 'all'
-    });
+        iceTransportPolicy: 'all',
+        bundlePolicy: 'max-bundle',
+        rtcpMuxPolicy: 'require',
+        iceCandidatePoolSize: 2
+    };
 
-    // Add error handling for negotiation needed
-    peerConnection.onnegotiationneeded = async () => {
-        try {
-            if (isHost) {
-                await createAndSendOffer();
-            }
-        } catch (error) {
-            console.error('Error during negotiation:', error);
+    peerConnection = new RTCPeerConnection(configuration);
+
+    // Add video element event listeners for remote video
+    remoteVideo.onloadedmetadata = () => {
+        console.log('Remote video metadata loaded');
+        remoteVideo.play().catch(e => console.error('Error playing remote video:', e));
+    };
+
+    remoteVideo.onplay = () => console.log('Remote video playing');
+    remoteVideo.onerror = (e) => console.error('Remote video error:', e);
+
+    peerConnection.ontrack = (event) => {
+        console.log('Received remote track:', event.track.kind);
+        if (event.track.kind === 'video') {
+            remoteVideo.srcObject = event.streams[0];
+            remoteVideo.onloadedmetadata = async () => {
+                console.log('Remote video metadata loaded');
+                await tryPlayVideo(remoteVideo);
+            };
         }
+    };
+
+    // Monitor connection state
+    let iceConnectionTimeout;
+    peerConnection.oniceconnectionstatechange = () => {
+        console.log('ICE Connection State:', peerConnection.iceConnectionState);
+        const connectionStatus = document.getElementById('connectionStatus');
+        
+        // Clear existing timeout if any
+        if (iceConnectionTimeout) {
+            clearTimeout(iceConnectionTimeout);
+        }
+
+        // Set new timeout for checking state
+        iceConnectionTimeout = setTimeout(() => {
+            if (peerConnection.iceConnectionState === 'checking') {
+                console.log('Connection timeout - retrying');
+                handleConnectionRetry(new Error('ICE timeout'));
+            }
+        }, 10000); // 10 second timeout
+
+        // Update status with timestamp
+        const now = new Date().toLocaleTimeString();
+        connectionStatus.innerHTML += `<br>[${now}] Connection: ${peerConnection.iceConnectionState}`;
+        
+        if (peerConnection.iceConnectionState === 'connected') {
+            clearTimeout(iceConnectionTimeout);
+            connectionStatus.innerHTML += ' ✅';
+        } else if (peerConnection.iceConnectionState === 'failed' || 
+                   peerConnection.iceConnectionState === 'disconnected') {
+            connectionStatus.innerHTML += ' ❌';
+            handleConnectionRetry(new Error('ICE connection failed'));
+        }
+    };
+
+    // Monitor ICE gathering state
+    peerConnection.onicegatheringstatechange = () => {
+        console.log('ICE Gathering State:', peerConnection.iceGatheringState);
     };
 
     peerConnection.onicecandidate = (event) => {
@@ -249,15 +357,6 @@ async function initializePeerConnection() {
             console.log('Sending ICE candidate:', event.candidate);
             socket.emit('ice-candidate', event.candidate, currentRoomId);
         }
-    };
-
-    peerConnection.ontrack = (event) => {
-        console.log('Received remote track:', event.track.kind);
-        remoteVideo.srcObject = event.streams[0];
-    };
-
-    peerConnection.oniceconnectionstatechange = () => {
-        console.log('ICE Connection State:', peerConnection.iceConnectionState);
     };
 
     peerConnection.onconnectionstatechange = () => {
@@ -293,6 +392,7 @@ async function createAndSendOffer() {
             offerToReceiveAudio: true,
             offerToReceiveVideo: true,
             voiceActivityDetection: false // Changed to false for better compatibility
+            
         });
         
         // Wait for stable state before setting local description
@@ -398,19 +498,83 @@ async function shareStream() {
 // Add this function to handle connection retries
 function handleConnectionRetry(error) {
     console.warn('Connection error, retrying:', error);
+    const connectionStatus = document.getElementById('connectionStatus');
+    connectionStatus.innerHTML += '<br>⚠️ Connection issue - attempting to reconnect...';
+
     if (peerConnection) {
         peerConnection.close();
     }
+
     setTimeout(async () => {
         await initializePeerConnection();
         if (isHost) {
             await createAndSendOffer();
         }
+        connectionStatus.innerHTML += '<br>🔄 Reconnection attempt made';
     }, 2000);
+}
+
+// Add this function to check stream status
+function checkStreamStatus() {
+    if (localStream) {
+        localStream.getTracks().forEach(track => {
+            console.log(`${track.kind} track:`, {
+                enabled: track.enabled,
+                muted: track.muted,
+                readyState: track.readyState
+            });
+        });
+    }
+}
+
+// Call checkStreamStatus periodically
+setInterval(checkStreamStatus, 5000);
+
+// Add connection status monitoring
+function monitorConnection() {
+    if (peerConnection) {
+        console.log({
+            iceConnectionState: peerConnection.iceConnectionState,
+            connectionState: peerConnection.connectionState,
+            signalingState: peerConnection.signalingState,
+            iceGatheringState: peerConnection.iceGatheringState
+        });
+    }
+}
+
+// Monitor connection every 5 seconds
+setInterval(monitorConnection, 5000);
+
+// Add this new function to handle mobile-specific setup
+function setupMobileConnection() {
+    // Request wake lock to prevent sleep
+    try {
+        if ('wakeLock' in navigator) {
+            navigator.wakeLock.request('screen')
+                .then(lock => console.log('Wake Lock active'))
+                .catch(err => console.log('Wake Lock error:', err));
+        }
+    } catch (err) {
+        console.log('Wake Lock not supported');
+    }
+
+    // Add visible connection status for mobile
+    if (/iPhone|iPad|iPod|Android/i.test(navigator.userAgent)) {
+        const connectionStatus = document.getElementById('connectionStatus');
+        connectionStatus.style.position = 'fixed';
+        connectionStatus.style.bottom = '80px';
+        connectionStatus.style.left = '0';
+        connectionStatus.style.right = '0';
+        connectionStatus.style.backgroundColor = 'rgba(0,0,0,0.7)';
+        connectionStatus.style.color = 'white';
+        connectionStatus.style.padding = '10px';
+        connectionStatus.style.zIndex = '1000';
+    }
 }
 
 // Initialize on page load
 window.addEventListener('load', () => {
+    setupMobileConnection();
     init();
     
     // Hide all controls initially for viewers

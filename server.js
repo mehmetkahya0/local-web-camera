@@ -4,8 +4,12 @@ const http = require('http').Server(app);
 const io = require('socket.io')(http, {
     cors: {
         origin: "*",
-        methods: ["GET", "POST"]
-    }
+        methods: ["GET", "POST"],
+        transports: ['websocket', 'polling'],
+        credentials: true
+    },
+    pingTimeout: 60000,
+    pingInterval: 25000
 });
 const fs = require('fs');
 const path = require('path');
@@ -15,34 +19,21 @@ const port = 8080;  // Changed port to 8080
 // Improved IP detection for macOS
 function getLocalIP() {
     const interfaces = os.networkInterfaces();
+    const addresses = [];
     
-    // Priority order for interfaces
-    const interfacePriority = ['en0', 'en1', 'eth0', 'eth1'];
-    
-    // First try priority interfaces
-    for (const name of interfacePriority) {
-        if (interfaces[name]) {
-            for (const iface of interfaces[name]) {
-                if (iface.family === 'IPv4' && !iface.internal) {
-                    console.log(`Found IP on ${name}:`, iface.address);
-                    return iface.address;
-                }
+    // Collect all IPv4 addresses
+    Object.keys(interfaces).forEach((name) => {
+        interfaces[name].forEach((net) => {
+            // Skip internal (i.e. 127.0.0.1) and non-ipv4 addresses
+            if (net.family === 'IPv4' && !net.internal) {
+                console.log(`Found IP on ${name}:`, net.address);
+                addresses.push(net.address);
             }
-        }
-    }
+        });
+    });
 
-    // If no priority interface found, try all interfaces
-    for (const name of Object.keys(interfaces)) {
-        for (const iface of interfaces[name]) {
-            if (iface.family === 'IPv4' && !iface.internal) {
-                console.log(`Found IP on ${name}:`, iface.address);
-                return iface.address;
-            }
-        }
-    }
-    
-    console.log('No suitable network interface found, using localhost');
-    return '127.0.0.1';
+    // Return first non-internal IPv4 address or localhost as fallback
+    return addresses.length > 0 ? addresses[0] : '127.0.0.1';
 }
 
 const localIP = getLocalIP();
@@ -220,20 +211,41 @@ readline.on('line', (input) => {
 // Update the server listening configuration
 http.listen(port, '0.0.0.0', () => {
     const networks = os.networkInterfaces();
-    console.log('\nNetwork Interfaces:');
+    console.log('\nAvailable Network Interfaces:');
     
-    // Print all available interfaces and their IPs
+    // First display all interfaces for debugging
     Object.keys(networks).forEach(name => {
-        const ifaces = networks[name];
-        ifaces.forEach(iface => {
-            if (iface.family === 'IPv4') {
-                console.log(`${name}: ${iface.address}${iface.internal ? ' (internal)' : ''}`);
+        console.log(`\nInterface: ${name}`);
+        networks[name].forEach(net => {
+            console.log(`  ${net.family} - ${net.address}${net.internal ? ' (internal)' : ''}`);
+        });
+    });
+
+    // Then collect and display all usable addresses
+    const addresses = [];
+    Object.keys(networks).forEach(name => {
+        networks[name].forEach(net => {
+            if (net.family === 'IPv4' && !net.internal) {
+                addresses.push({ name, address: net.address });
             }
         });
     });
-    
-    console.log('\nServer URLs:');
-    console.log(`Local access:     http://localhost:${port}`);
-    console.log(`Network access:   http://${localIP}:${port}`);
-    console.log('\nTo access from your iPhone, use the Network access URL above');
+
+    if (addresses.length === 0) {
+        console.log('\n⚠️  Warning: No external network interfaces found!');
+        console.log('Server is only accessible on localhost (127.0.0.1)');
+        console.log('Check your network connection and firewall settings');
+    } else {
+        console.log('\n🌐 Server URLs:');
+        addresses.forEach(({ name, address }) => {
+            console.log(`Network (${name}): http://${address}:${port}`);
+        });
+        console.log('\n📱 For mobile devices, use one of the Network URLs above');
+        console.log('Make sure your phone is on the same WiFi network');
+    }
+
+    // Always show localhost for local development
+    console.log('\n💻 Local development:');
+    console.log(`Localhost: http://localhost:${port}`);
+    console.log(`Local IP: http://127.0.0.1:${port}`);
 });

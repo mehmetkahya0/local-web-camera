@@ -34,6 +34,10 @@ video {
     width: 100%;
     max-width: 800px;
     height: auto;
+    transform: translateZ(0);
+    -webkit-transform: translateZ(0);
+    backface-visibility: hidden;
+    -webkit-backface-visibility: hidden;
 }
 
 .controls {
@@ -77,4 +81,27 @@ button:hover {
     padding: 10px;
     border-radius: 4px;
     background-color: #f8f9fa;
+}
+
+/* Add mobile-specific styles */
+@media (max-width: 768px) {
+    .video-container {
+        flex-direction: column;
+    }
+    
+    video {
+        width: 100% !important;
+        max-height: 40vh;
+    }
+    
+    .controls {
+        flex-direction: column;
+        gap: 10px;
+    }
+    
+    button {
+        width: 100%;
+        padding: 12px;
+        font-size: 16px;
+    }
 }
