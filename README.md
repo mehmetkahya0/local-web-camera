@@ -66,7 +66,7 @@ npm start
 3. Share the generated URL with the viewer
 
 ### As a Viewer:
-1. Open the URL shared by the host
+1. Open the http://[Host_Device_Local_IP]?room=SHARED_LINK_ROOM_ID
 2. Wait for the connection to be established
 3. The stream will start automatically
 
@@ -99,6 +99,44 @@ The server runs on port 8080 by default. To change this:
 - One viewer per stream limit
 - Automatic connection monitoring
 - Cross-Origin Resource Sharing (CORS) protection
+
+## 🛡️ Security
+
+### Network Security
+- End-to-end encryption via WebRTC
+- DTLS (Datagram Transport Layer Security) protocol
+- Secure signaling through Socket.IO
+- Network isolation between peers
+
+### Data Protection
+- No video/audio data storage on server
+- Temporary session-only data
+- Automatic data cleanup on disconnection
+- No personal information collection
+
+### Access Control
+- Unique room IDs per session
+- Auto-expiring session tokens
+- IP-based rate limiting
+- Validation of all incoming connections
+
+### Best Practices
+1. Use HTTPS in production
+2. Keep Node.js and dependencies updated
+3. Change default port in public deployments
+4. Enable firewall rules as needed
+
+### Security Audit Commands
+```bash
+# Run security audit on dependencies
+npm audit
+
+# Check for known vulnerabilities
+npm audit fix
+
+# Update dependencies to secure versions
+npm update
+```
 
 ## Chart Features
 

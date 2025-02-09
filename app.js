@@ -513,7 +513,7 @@ async function shareStream() {
         currentRoomId = Math.random().toString(36).substring(7);
         const host = window.location.hostname;
         const port = window.location.port || '8080';
-        const fullUrl = `http://${host}:${port}?room=${currentRoomId}`;
+        const fullUrl = `http://192.168.HOST_DEVICE_IP:${port}?room=${currentRoomId}`;
         
         socket.emit('join-room', currentRoomId);
         streamUrl.textContent = fullUrl;
