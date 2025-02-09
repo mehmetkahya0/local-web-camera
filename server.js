@@ -59,26 +59,47 @@ app.get('*', (req, res) => {
     res.sendFile(path.join(__dirname, 'index.html'));
 });
 
-const rooms = new Map();
+const rooms = new Map(); // rooms store format: roomId -> Map<socketId, {peerId, streams: Set<streamId>}>
 
 // Socket.io connection handling
 io.on('connection', (socket) => {
     console.log('A user connected:', socket.id);
 
     socket.on('join-room', (roomId) => {
-        // Create room if it doesn't exist
         if (!rooms.has(roomId)) {
-            rooms.set(roomId, new Set());
+            rooms.set(roomId, new Map());
         }
 
         const room = rooms.get(roomId);
-        room.add(socket.id);
+        room.set(socket.id, { peerId: socket.id, streams: new Set() });
         socket.join(roomId);
-        
-        // Notify other users in the room
+
+        // Notify all existing users in the room about the new user
         socket.to(roomId).emit('user-connected', socket.id);
+
+        // Send existing users to the new participant
+        const existingUsers = Array.from(room.keys()).filter(id => id !== socket.id);
+        socket.emit('existing-users', existingUsers);
         
         console.log(`User ${socket.id} joined room ${roomId}`);
+    });
+
+    socket.on('stream-started', (roomId, streamId) => {
+        const room = rooms.get(roomId);
+        if (room && room.has(socket.id)) {
+            const user = room.get(socket.id);
+            user.streams.add(streamId);
+            socket.to(roomId).emit('peer-stream-started', socket.id, streamId);
+        }
+    });
+
+    socket.on('stream-stopped', (roomId, streamId) => {
+        const room = rooms.get(roomId);
+        if (room && room.has(socket.id)) {
+            const user = room.get(socket.id);
+            user.streams.delete(streamId);
+            socket.to(roomId).emit('peer-stream-stopped', socket.id, streamId);
+        }
     });
 
     socket.on('offer', (offer, roomId) => {
@@ -101,8 +122,11 @@ io.on('connection', (socket) => {
         const room = rooms.get(roomId);
         const users = [];
         if (room) {
-            room.forEach(user => {
-                users.push(user);
+            room.forEach((userData, userId) => {
+                users.push({
+                    id: userId,
+                    streams: Array.from(userData.streams)
+                });
             });
         }
         socket.emit('list-users', users);
@@ -142,13 +166,18 @@ io.on('connection', (socket) => {
 
     // Handle disconnection
     socket.on('disconnect', () => {
-        // Clean up rooms when users disconnect
         rooms.forEach((users, roomId) => {
             if (users.has(socket.id)) {
+                const user = users.get(socket.id);
+                // Notify others about all streams that were active
+                user.streams.forEach(streamId => {
+                    socket.to(roomId).emit('peer-stream-stopped', socket.id, streamId);
+                });
                 users.delete(socket.id);
                 if (users.size === 0) {
                     rooms.delete(roomId);
                 }
+                socket.to(roomId).emit('user-disconnected', socket.id);
             }
         });
         console.log('User disconnected:', socket.id);
@@ -211,41 +240,46 @@ readline.on('line', (input) => {
 // Update the server listening configuration
 http.listen(port, '0.0.0.0', () => {
     const networks = os.networkInterfaces();
-    console.log('\nAvailable Network Interfaces:');
+    console.log('\n=== Network Interfaces ===');
     
-    // First display all interfaces for debugging
-    Object.keys(networks).forEach(name => {
-        console.log(`\nInterface: ${name}`);
-        networks[name].forEach(net => {
-            console.log(`  ${net.family} - ${net.address}${net.internal ? ' (internal)' : ''}`);
-        });
-    });
-
-    // Then collect and display all usable addresses
-    const addresses = [];
+    // Format and display each network interface
+    let validIPs = [];
+    
     Object.keys(networks).forEach(name => {
         networks[name].forEach(net => {
             if (net.family === 'IPv4' && !net.internal) {
-                addresses.push({ name, address: net.address });
+                validIPs.push({
+                    interface: name,
+                    ip: net.address
+                });
+                console.log(`\n${name}:`);
+                console.log(`  IP: ${net.address}`);
+                console.log(`  Type: ${net.internal ? 'Internal' : 'External'}`);
             }
         });
     });
 
-    if (addresses.length === 0) {
-        console.log('\n⚠️  Warning: No external network interfaces found!');
-        console.log('Server is only accessible on localhost (127.0.0.1)');
-        console.log('Check your network connection and firewall settings');
-    } else {
-        console.log('\n🌐 Server URLs:');
-        addresses.forEach(({ name, address }) => {
-            console.log(`Network (${name}): http://${address}:${port}`);
+    // Display connection information
+    console.log('\n=== Connection URLs ===');
+    if (validIPs.length > 0) {
+        console.log('\n📱 For mobile devices, use one of these URLs:');
+        validIPs.forEach(({interface, ip}) => {
+            console.log(`\n  http://${ip}:${port}`);
+            console.log(`  (via ${interface})`);
         });
-        console.log('\n📱 For mobile devices, use one of the Network URLs above');
-        console.log('Make sure your phone is on the same WiFi network');
+    } else {
+        console.log('\n⚠️  No external network interfaces found!');
     }
 
-    // Always show localhost for local development
+    // Always show localhost
     console.log('\n💻 Local development:');
-    console.log(`Localhost: http://localhost:${port}`);
-    console.log(`Local IP: http://127.0.0.1:${port}`);
+    console.log(`  http://localhost:${port}`);
+    console.log(`  http://127.0.0.1:${port}`);
+    
+    // Print the recommended URL
+    if (validIPs.length > 0) {
+        console.log('\n✅ Recommended URL for mobile devices:');
+        console.log(`  http://${validIPs[0].ip}:${port}`);
+    }
+    console.log('\n=== Server is running ===\n');
 });
